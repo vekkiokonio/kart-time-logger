@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Race Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            position: relative;
+        }
+
+        th.sorted-asc::after {
+            content: "▲";
+            position: absolute;
+            right: 8px;
+            color: white;
+        }
+
+        th.sorted-desc::after {
+            content: "▼";
+            position: absolute;
+            right: 8px;
+            color: white;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tbody tr:hover {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Race Data</h1>
+    <table id="race-table">
+        <thead>
+            <tr>
+                <th data-column="position">Position</th>
+                <th data-column="kart">Kart</th>
+                <th data-column="driver">Driver</th>
+                <th data-column="best">Best Lap</th>
+                <th data-column="last">Last Lap</th>
+                <th data-column="gap">Gap</th>
+                <th data-column="lap">Lap</th>
+                <th data-column="ontrack">On Track</th>
+                <th data-column="pit">Pit</th>
+                <th data-column="median">Median</th>
+                <th data-column="average">Average</th>
+                <th data-column="history">History</th>
+            </tr>
+        </thead>
+        <tbody id="race-data">
+            <!-- Rows will be inserted here -->
+        </tbody>
+    </table>
+
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+
+        let sortColumn = "position";
+        let sortOrder = "asc";
+        let currentData = {}; // To store the current race data
+
+        function compareValues(a, b, column, order) {
+            let valA = a[column];
+            let valB = b[column];
+
+            if (column === "position" || column === "lap") {
+                valA = parseInt(valA, 10);
+                valB = parseInt(valB, 10);
+            } else if (column === "best" || column === "last" || column === "gap") {
+                valA = parseFloat(valA);
+                valB = parseFloat(valB);
+            }
+
+            if (valA < valB) return order === "asc" ? -1 : 1;
+            if (valA > valB) return order === "asc" ? 1 : -1;
+            return 0;
+        }
+
+        function updateTable(data) {
+            const tbody = document.getElementById('race-data');
+            tbody.innerHTML = '';
+
+            const sortedEntries = Object.entries(data).sort(([idA, a], [idB, b]) => compareValues(a, b, sortColumn, sortOrder));
+
+            for (const [id, entry] of sortedEntries) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${entry.position}</td>
+                    <td>${entry.kart}</td>
+                    <td>${entry.driver}</td>
+                    <td>${entry.best}</td>
+                    <td>${entry.last}</td>
+                    <td>${entry.gap}</td>
+                    <td>${entry.lap}</td>
+                    <td>${entry.ontrack}</td>
+                    <td>${entry.pit}</td>
+                    <td>${entry.median}</td>
+                    <td>${entry.average}</td>
+                    <td>${entry.history.join(', ')}</td>
+                `;
+                tbody.appendChild(row);
+            }
+        }
+
+        ws.onmessage = (event) => {
+            currentData = JSON.parse(event.data).grid; // Update the current data
+            updateTable(currentData); // Update table with the latest data
+        };
+
+        ws.onclose = () => {
+            console.error('WebSocket connection closed');
+        };
+
+        document.querySelectorAll('th').forEach(th => {
+            th.addEventListener('click', () => {
+                const column = th.getAttribute('data-column');
+                if (sortColumn === column) {
+                    sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortColumn = column;
+                    sortOrder = 'asc';
+                }
+
+                document.querySelectorAll('th').forEach(th => th.classList.remove('sorted-asc', 'sorted-desc'));
+                th.classList.add(sortOrder === 'asc' ? 'sorted-asc' : 'sorted-desc');
+
+                updateTable(currentData); // Update table based on current sorting
+            });
+        });
+
+        // Apply default sort on load
+        window.addEventListener('load', () => {
+            const positionHeader = document.querySelector('th[data-column="position"]');
+            positionHeader.classList.add('sorted-asc');
+
+            // Apply default sorting to existing data if available
+            if (Object.keys(currentData).length > 0) {
+                updateTable(currentData);
+            }
+        });
+    </script>
+</body>
+</html>
