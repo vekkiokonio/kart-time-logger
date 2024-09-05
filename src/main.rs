@@ -15,13 +15,14 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message as WsMessage};
 use url::Url;
-use std::fs::File;
+use std::fs::{File, create_dir_all};
 use std::io::Write;
 use chrono::Local;
 use tokio::signal;
+use std::path::Path;
 
 // Select track and type of race ("LIGNANO-PRACTICE", "LIGNANO-RACE")
-const PROFILE: &str = "CAMPILLOS-RACE";
+const PROFILE: &str = "CAMPILLOS-8HORAS-FP";
 
 // Define the GridData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -81,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Broadcast the updated data to all clients immediately
                 let race_data_guard = race_data_for_socket.lock().unwrap();
                 let serialized_data = serde_json::to_string(&*race_data_guard).unwrap();
-                if let Err(_) = tx_for_socket.send(serialized_data) {
+                if tx_for_socket.send(serialized_data).is_err() {
                     println!("Failed to send update to WebSocket clients.");
                 }
             }
@@ -184,7 +185,6 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                 }
             }
         }
-        //else if part.starts_with("r") {
         else {
             
             // Parse the part line by line
@@ -200,9 +200,6 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                         let col_start = line[col_match_start..].find("c").unwrap() + col_match_start;
                         let col_end = line[col_start..].find("|").unwrap() + col_start;
                         let column = line[col_start..col_end].to_string();
-    
-                        println!("Column start: {col_start}");
-                        println!("Column end: {col_end}");
     
                         // Extract row_id
                         let row_start = line[row_match_start..].find("r").unwrap() + row_match_start + 1;
@@ -235,13 +232,27 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                                 // Update last lap
                                 _ if column.as_str() == config.last() => {
                                     //println!("Last lap is: {}", value);
+
+
                                     race_data.grid.entry(row_id).and_modify(|grid_data| {
+                                        println!("Before update: Last = {}, History = {}", grid_data.last, grid_data.history.concat());
                                         grid_data.last = value.to_string();
-                                        grid_data.history.push(value.to_string());
+                                        println!("After last update: Last = {}, History = {}", grid_data.last, grid_data.history.concat());
+
+                                        // Check previous element in history
+                                        if let Some(last) = grid_data.history.last_mut() {
+                                            if last.is_empty() {
+                                                *last = value.to_string();
+                                            } else if last != value {
+                                                grid_data.history.push(value.to_string());
+                                            }
+                                        } else {
+                                            grid_data.history.push(value.to_string());
+                                        }
+                                        println!("After push update: Last = {}, History = {}", grid_data.last, grid_data.history.concat());
                                         let (median, average) = compute_lap_statistics(&grid_data.history);
                                         grid_data.median = median;
                                         grid_data.average = average;
-                                        println!("New value: {} <==> History: {}", value.to_string(), grid_data.history.concat());
                                     });
                                 }
                                 // Update lap
@@ -295,7 +306,11 @@ fn write_json_to_file(json_string: &str) -> std::io::Result<()> {
     // Get the current time and format it as "YYYY-MM-DD_HH-MM-SS"
     let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
     // Create a filename with the timestamp included
-    let filename = format!("race_data_{}.json", timestamp);
+    // Create the log directory if it doesn't exist
+    if !Path::new("log").exists() {
+        create_dir_all("log")?;
+    }
+    let filename = format!("log/race_data_{}.json", timestamp);
     // Create or open the JSON file for writing
     let mut file = File::create(&filename)?;
     // Write the JSON string to the file
@@ -313,7 +328,7 @@ fn extract_data(row: &str, column: &str) -> String {
     String::new()
 }
 
-fn compute_lap_statistics(history: &Vec<String>) -> (Option<String>, Option<String>) {
+fn compute_lap_statistics(history: &[String]) -> (Option<String>, Option<String>) {
     // Convert lap times to milliseconds
     let mut lap_times: Vec<u64> = history
         .iter()
