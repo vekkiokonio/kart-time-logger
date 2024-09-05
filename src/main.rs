@@ -90,7 +90,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let app = Router::new()
-        .route("/ws", get(move |ws: WebSocketUpgrade| handle_socket(ws, tx.subscribe())))
+        .route("/ws", get({
+            let race_data_clone = Arc::clone(&race_data);
+            move |ws: WebSocketUpgrade| handle_socket(ws, tx.subscribe(), race_data_clone)
+        }))
         .route("/", get(|| async { axum::response::Html(include_str!("index.html")) }));
 
     // Channel to signal shutdown
@@ -114,16 +117,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn handle_socket(ws: WebSocketUpgrade, mut rx: broadcast::Receiver<String>) -> impl IntoResponse {
+async fn handle_socket(ws: WebSocketUpgrade, mut rx: broadcast::Receiver<String>, race_data: Arc<Mutex<RaceData>>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| async move {
         let (mut sender, _) = socket.split();
-        while let Ok(message) = rx.recv().await {
-            if sender.send(Message::Text(message)).await.is_err() {
+
+        // Send the current race data immediately upon connection
+        let initial_data = {
+            let race_data_guard = race_data.lock().unwrap();
+            serde_json::to_string(&*race_data_guard).unwrap()
+        };
+
+        if sender.send(Message::Text(initial_data)).await.is_err() {
+            return;
+        }
+
+        // Continue sending updates when new data is available
+        while (rx.recv().await).is_ok() {
+            let serialized_data = {
+                let race_data_guard = race_data.lock().unwrap();
+                serde_json::to_string(&*race_data_guard).unwrap()
+            };
+
+            if sender.send(Message::Text(serialized_data)).await.is_err() {
                 break;
             }
         }
     })
 }
+
 
 
 // Function to parse race data
