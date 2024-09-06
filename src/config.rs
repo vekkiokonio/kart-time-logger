@@ -27,6 +27,12 @@ impl TrackConfig {
                     url_track: "ws://www.apex-timing.com:9372/",
                 }
             }
+            // Ariza Racing Circuit
+            "ARIZA-PRACTICE" | "ARIZA-RACE" => {
+                TrackConfig {
+                    url_track: "ws://www.apex-timing.com:8972/",
+                }
+            }
             _ => panic!("Unknown track: {}", profile),
         }
     }
@@ -113,6 +119,18 @@ impl RaceConfig {
                 lap: "c12",
                 ontrack: "not-present",
                 pit: "C3",
+            },
+            // Free Practice / Race @ Karting Center Campillos
+            "ARIZA-PRACTICE" | "ARIZA-RACE" => RaceConfig {
+                kart: "c4",
+                driver: "c5",
+                position: "c3",
+                best: "c7",
+                last: "c6",
+                gap: "c8",
+                lap: "c10",
+                ontrack: "not-present",
+                pit: "not-present",
             },
             _ => panic!("Unknown profile: {}", profile),
         }

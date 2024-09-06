@@ -22,7 +22,7 @@ use tokio::signal;
 use std::path::Path;
 
 // Select track and type of race ("LIGNANO-PRACTICE", "LIGNANO-RACE")
-const PROFILE: &str = "CAMPILLOS-8HORAS-FP";
+const PROFILE: &str = "ARIZA-PRACTICE";
 
 // Define the GridData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -212,10 +212,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
             for line in part.lines() {
 
                 if line.starts_with("r") {
-                    println!("{line}");
                     if let (Some(col_match_start), Some(row_match_start)) = (line.find("c"), line.find("r")) {
-    
-                        println!("Line: {line}");
     
                         // Extract column
                         let col_start = line[col_match_start..].find("c").unwrap() + col_match_start;
@@ -256,9 +253,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
 
 
                                     race_data.grid.entry(row_id).and_modify(|grid_data| {
-                                        println!("Before update: Last = {}, History = {}", grid_data.last, grid_data.history.concat());
                                         grid_data.last = value.to_string();
-                                        println!("After last update: Last = {}, History = {}", grid_data.last, grid_data.history.concat());
 
                                         // Check previous element in history
                                         if let Some(last) = grid_data.history.last_mut() {
@@ -270,7 +265,6 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                                         } else {
                                             grid_data.history.push(value.to_string());
                                         }
-                                        println!("After push update: Last = {}, History = {}", grid_data.last, grid_data.history.concat());
                                         let (median, average) = compute_lap_statistics(&grid_data.history);
                                         grid_data.median = median;
                                         grid_data.average = average;
@@ -382,13 +376,16 @@ fn compute_lap_statistics(history: &[String]) -> (Option<String>, Option<String>
 
 fn lap_time_to_milliseconds(lap_time: &str) -> Option<u64> {
     let parts: Vec<&str> = lap_time.split(':').collect();
+    let minutes;
+    let seconds_and_millis: Vec<&str>;
 
     if parts.len() != 2 {
-        return None;
+        minutes = 0;
+        seconds_and_millis = parts[0].split('.').collect();
+    } else {
+        minutes = parts[0].parse::<u64>().ok()?;
+        seconds_and_millis = parts[1].split('.').collect();
     }
-
-    let minutes = parts[0].parse::<u64>().ok()?;
-    let seconds_and_millis: Vec<&str> = parts[1].split('.').collect();
 
     if seconds_and_millis.len() != 2 {
         return None;
@@ -396,7 +393,6 @@ fn lap_time_to_milliseconds(lap_time: &str) -> Option<u64> {
 
     let seconds = seconds_and_millis[0].parse::<u64>().ok()?;
     let millis = seconds_and_millis[1].parse::<u64>().ok()?;
-
     Some((minutes * 60 * 1000) + (seconds * 1000) + millis)
 }
 
@@ -405,7 +401,11 @@ fn milliseconds_to_lap_time(milliseconds: u64) -> String {
     let seconds = (milliseconds % 60000) / 1000;
     let millis = milliseconds % 1000;
 
-    format!("{:01}:{:02}.{:03}", minutes, seconds, millis)
+    if minutes == 0 {
+        format!("{:02}.{:03}", seconds, millis)
+    } else {
+        format!("{:01}:{:02}.{:03}", minutes, seconds, millis)
+    }
 }
 
 async fn shutdown_signal(race_data: Arc<Mutex<RaceData>>) {
