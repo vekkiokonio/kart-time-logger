@@ -10,7 +10,7 @@ use config::{RaceConfig, TrackConfig};
 use futures_util::StreamExt;
 use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message as WsMessage};
@@ -22,7 +22,7 @@ use tokio::signal;
 use std::path::Path;
 
 // Select track and type of race ("LIGNANO-PRACTICE", "LIGNANO-RACE")
-const PROFILE: &str = "ARIZA-PRACTICE";
+const PROFILE: &str = "LIGNANO-RACE";
 
 // Define the GridData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -36,20 +36,33 @@ struct GridData {
     lap: String,
     ontrack: String,
     pit: String,
-    history: Vec<String>,
+    history: Vec<Vec<String>>,
     median: Option<String>,
     average: Option<String>,
+}
+
+// Define the Stint struct
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct Stint {
+    kart: String,
+    driver: String,
+    best: String,
+    ontrack: String,
+    median: Option<String>,
+    average: Option<String>,
+    history: Vec<String>,
 }
 
 // Define the RaceData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct RaceData {
     grid: HashMap<String, GridData>,
+    pit: VecDeque<Stint>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let race_data = Arc::new(Mutex::new(RaceData { grid: HashMap::new() }));
+    let race_data = Arc::new(Mutex::new(RaceData { grid: HashMap::new(), pit: VecDeque::new() }));
     let (tx, _rx) = broadcast::channel::<String>(100);
 
     let race_data_for_socket = Arc::clone(&race_data);
@@ -199,7 +212,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                         lap,
                         ontrack,
                         pit,
-                        history: vec![last],
+                        history: vec![vec![last]],
                         median: Some("".to_string()),
                         average: Some("".to_string()),
                     });
@@ -256,16 +269,18 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                                         grid_data.last = value.to_string();
 
                                         // Check previous element in history
-                                        if let Some(last) = grid_data.history.last_mut() {
-                                            if last.is_empty() {
-                                                *last = value.to_string();
-                                            } else if last != value {
-                                                grid_data.history.push(value.to_string());
+                                        if let Some(last_stint) = grid_data.history.last_mut() {
+                                            if let Some(last) = last_stint.last_mut() {
+                                                if last.is_empty() {
+                                                    *last = value.to_string();
+                                                } else if last != value {
+                                                    grid_data.history.last_mut().unwrap().push(value.to_string());
+                                                }
                                             }
                                         } else {
-                                            grid_data.history.push(value.to_string());
+                                            grid_data.history.last_mut().unwrap().push(value.to_string());
                                         }
-                                        let (median, average) = compute_lap_statistics(&grid_data.history);
+                                        let (median, average) = compute_lap_statistics(grid_data.history.last().unwrap());
                                         grid_data.median = median;
                                         grid_data.average = average;
                                     });
@@ -284,8 +299,19 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                                 }
                                 // Update pit
                                 _ if column.as_str() == config.pit() => {
-                                    race_data.grid.entry(row_id).and_modify(|grid_data| {
+                                    race_data.grid.entry(row_id.clone()).and_modify(|grid_data| {
                                         grid_data.pit = value.to_string();
+                                    });
+                                    // Add the recent stint
+                                    if let Some(grid_data) = race_data.grid.get(&row_id) {
+                                        let stint = store_stint(grid_data);
+                                        race_data.pit.push_back(stint);
+                                    };
+                                    // Create a new stint in the history and clean up statistics
+                                    race_data.grid.entry(row_id).and_modify(|grid_data| {
+                                        grid_data.history.push(vec![]);
+                                        grid_data.median = Some("".to_string());
+                                        grid_data.average = Some("".to_string());
                                     });
                                 }
                                 _ => {}
@@ -299,6 +325,19 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
     // Serialize and pretty print as JSON
     // let pretty_json = serde_json::to_string_pretty(&race_data).unwrap();
     // println!("{}", pretty_json);
+}
+
+// Function to store data from last stint
+fn store_stint(grid_data: &GridData) -> Stint {
+    Stint {
+        kart: grid_data.kart.clone(),
+        driver: grid_data.driver.clone(),
+        best: grid_data.best.clone(),
+        ontrack: grid_data.ontrack.clone(),
+        median: grid_data.median.clone(),
+        average: grid_data.average.clone(),
+        history: grid_data.history.last().unwrap().clone(),
+    }
 }
 
 // Function to export race data to JSON file

@@ -120,14 +120,25 @@ impl RaceConfig {
                 ontrack: "not-present",
                 pit: "C3",
             },
-            // Free Practice / Race @ Karting Center Campillos
-            "ARIZA-PRACTICE" | "ARIZA-RACE" => RaceConfig {
+            // Free Practice / Race @ Ariza Racing Circuit
+            "ARIZA-PRACTICE" => RaceConfig {
                 kart: "c4",
                 driver: "c5",
                 position: "c3",
                 best: "c7",
                 last: "c6",
                 gap: "c8",
+                lap: "c10",
+                ontrack: "not-present",
+                pit: "not-present",
+            },
+            "ARIZA-RACE" => RaceConfig {
+                kart: "c4",
+                driver: "c5",
+                position: "c3",
+                best: "c9",
+                last: "c6",
+                gap: "c7",
                 lap: "c10",
                 ontrack: "not-present",
                 pit: "not-present",
