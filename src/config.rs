@@ -73,12 +73,24 @@ impl RaceConfig {
                 pit: "not-present",
             },
             // Race @ Lignano Circuit
-            "LIGNANO-RACE" | "SANTOS-RACE" => RaceConfig {
+            "LIGNANO-RACE" => RaceConfig {
                 kart: "c3",
                 driver: "c4",
                 position: "c2",
                 best: "c8",
                 last: "c6",
+                gap: "c7",
+                lap: "c12",
+                ontrack: "c9",
+                pit: "c10",
+            },
+            // Race @ Lignano Circuit
+            "SANTOS-RACE" => RaceConfig {
+                kart: "c3",
+                driver: "c4",
+                position: "c2",
+                best: "c6",
+                last: "c5",
                 gap: "c7",
                 lap: "c12",
                 ontrack: "c9",

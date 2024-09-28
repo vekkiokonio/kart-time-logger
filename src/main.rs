@@ -22,7 +22,7 @@ use tokio::signal;
 use std::path::Path;
 
 // Select track and type of race ("LIGNANO-PRACTICE", "LIGNANO-RACE")
-const PROFILE: &str = "ARIZA-PRACTICE";
+const PROFILE: &str = "SANTOS-RACE";
 
 // Define the GridData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
