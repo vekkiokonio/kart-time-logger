@@ -89,12 +89,12 @@ impl RaceConfig {
                 kart: "c3",
                 driver: "c4",
                 position: "c2",
-                best: "c6",
+                best: "c9",
                 last: "c5",
                 gap: "c7",
-                lap: "c12",
-                ontrack: "c9",
-                pit: "c10",
+                lap: "c6",
+                ontrack: "c11",
+                pit: "c12",
             },
             // Free Practice @ Karting Center Campillos
             "CAMPILLOS-PRACTICE" => RaceConfig {

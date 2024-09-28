@@ -186,7 +186,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                     let gap = extract_data(row, config.gap());
                     let lap = extract_data(row, config.lap());
                     let ontrack = extract_data(row, config.ontrack());
-                    let pit = extract_data(row, config.pit());
+                    //let pit = extract_data(row, config.pit());
 
                     // Push to race_data.grid
                     race_data.grid.entry(row_id.clone()).or_insert(GridData {
@@ -198,7 +198,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                         gap,
                         lap,
                         ontrack,
-                        pit,
+                        pit: "".to_string(),
                         history: vec![last],
                         median: Some("".to_string()),
                         average: Some("".to_string()),
@@ -228,6 +228,12 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                         let row: Vec<&str> = line.split('|').collect();
                         if let Some(value) = row.get(2) {
                             match column.as_str() {
+                                // Update driver
+                                _ if column.as_str() == config.driver() =>  {
+                                    race_data.grid.entry(row_id).and_modify(|grid_data| {
+                                        grid_data.driver = value.to_string();
+                                    });
+                                }
                                 // Update position
                                 _ if column.as_str() == config.position() =>  {
                                     race_data.grid.entry(row_id).and_modify(|grid_data| {
@@ -285,7 +291,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                                 // Update pit
                                 _ if column.as_str() == config.pit() => {
                                     race_data.grid.entry(row_id).and_modify(|grid_data| {
-                                        grid_data.pit = value.to_string();
+                                        grid_data.pit = grid_data.lap.clone();
                                     });
                                 }
                                 _ => {}
