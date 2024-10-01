@@ -20,9 +20,10 @@ use std::io::Write;
 use chrono::Local;
 use tokio::signal;
 use std::path::Path;
+use std::collections::VecDeque;
 
-// Select track and type of race ("LIGNANO-PRACTICE", "LIGNANO-RACE")
-const PROFILE: &str = "SANTOS-RACE";
+// Select track and type of race
+const PROFILE: &str = "CAMPILLOS-PRACTICE";
 
 // Define the GridData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -39,26 +40,41 @@ struct GridData {
     history: Vec<String>,
     median: Option<String>,
     average: Option<String>,
+    recent: Option<String>,
+}
+
+// Add history and ontrack
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+struct StintData {
+    kart: String,
+    driver: String,
+    median: String,     // TODO: this should be Option<String>
+    average: String,     // TODO: this should be Option<String>
+    lap: String,
 }
 
 // Define the RaceData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct RaceData {
     grid: HashMap<String, GridData>,
+    pit_stops: VecDeque<StintData>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let race_data = Arc::new(Mutex::new(RaceData { grid: HashMap::new() }));
+    let race_data = Arc::new(Mutex::new(RaceData { 
+        grid: HashMap::new(), 
+        pit_stops: VecDeque::with_capacity(15) // Initialize with capacity
+    }));
+    
     let (tx, _rx) = broadcast::channel::<String>(100);
 
     let race_data_for_socket = Arc::clone(&race_data);
     let tx_for_socket = tx.clone();
     tokio::spawn(async move {
         // Select track profile
-        let profile = PROFILE;
-        let config = RaceConfig::from_profile(profile);
-        let track = TrackConfig::from_profile(profile);
+        let config = RaceConfig::from_profile(PROFILE);
+        let track = TrackConfig::from_profile(PROFILE);
 
         // URL for the WebSocket connection
         let url = Url::parse(track.url_track()).expect("Invalid URL");
@@ -71,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         while let Some(msg) = read.next().await {
             if let Ok(WsMessage::Text(text)) = msg {
-                println!("Received text: {}", text);
+                //println!("Received text: {}", text);
 
                 {
                     let mut race_data_guard = race_data_for_socket.lock().unwrap();
@@ -145,8 +161,6 @@ async fn handle_socket(ws: WebSocketUpgrade, mut rx: broadcast::Receiver<String>
     })
 }
 
-
-
 // Function to parse race data
 fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
 
@@ -156,7 +170,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
 
         if part.starts_with("init|") & !race_data.grid.is_empty() {
             println!("A new race is starting");
-            export_data(&race_data);
+            export_data(race_data);
             // Clean race data
             race_data.grid = HashMap::new();
         }
@@ -165,7 +179,6 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
             let rows: Vec<&str> = part.split("<tr").collect();
             for row in rows {
                 if row.contains("data-id=\"r") {
-                    println!("Parsing row: {}", row);
 
                     // Don't parse first row
                     if row.contains("r0") {continue;}
@@ -174,7 +187,6 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                     if let Some(match_start) = row.find("data-id=\"") {
                         let start = row[match_start..].find("r").unwrap() + match_start + 1;
                         let end = row[start..].find("\"").unwrap() + start;
-                        println!("{}", &row[start..end]);
                         row_id = row[start..end].to_string();
                     } else { continue; }
 
@@ -186,7 +198,6 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                     let gap = extract_data(row, config.gap());
                     let lap = extract_data(row, config.lap());
                     let ontrack = extract_data(row, config.ontrack());
-                    //let pit = extract_data(row, config.pit());
 
                     // Push to race_data.grid
                     race_data.grid.entry(row_id.clone()).or_insert(GridData {
@@ -202,6 +213,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                         history: vec![last],
                         median: Some("".to_string()),
                         average: Some("".to_string()),
+                        recent: Some("".to_string()),
                     });
                 }
             }
@@ -271,9 +283,10 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                                         } else {
                                             grid_data.history.push(value.to_string());
                                         }
-                                        let (median, average) = compute_lap_statistics(&grid_data.history);
+                                        let (median, average, recent) = compute_lap_statistics(&grid_data.history);
                                         grid_data.median = median;
                                         grid_data.average = average;
+                                        grid_data.recent = recent;
                                     });
                                 }
                                 // Update lap
@@ -290,8 +303,27 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                                 }
                                 // Update pit
                                 _ if column.as_str() == config.pit() => {
-                                    race_data.grid.entry(row_id).and_modify(|grid_data| {
+                                    race_data.grid.entry(row_id.clone()).and_modify(|grid_data| {
                                         grid_data.pit = grid_data.lap.clone();
+                                        
+                                        // Clear the history when the kart makes a pit stop
+                                        grid_data.history.clear();
+
+                                        // Create a StintData instance from grid data
+                                        let pit_stop = StintData {
+                                            kart: grid_data.kart.clone(),
+                                            driver: grid_data.driver.clone(),
+                                            median: grid_data.median.clone().unwrap_or_default(),
+                                            average: grid_data.average.clone().unwrap_or_default(),
+                                            lap: grid_data.pit.clone(),
+                                        };
+
+                                        println!("{:?}", pit_stop);
+                                        // Push to pit_stops, maintaining a maximum of 15 entries
+                                        race_data.pit_stops.push_front(pit_stop);
+                                        if race_data.pit_stops.len() > 15 {
+                                            race_data.pit_stops.pop_back(); // Remove the oldest (back) entry
+                                        }
                                     });
                                 }
                                 _ => {}
@@ -343,13 +375,13 @@ fn extract_data(row: &str, column: &str) -> String {
     if let Some(match_start) = row.find(column) {
         let start = row[match_start..].find(">").unwrap() + match_start + 1;
         let end = row[start..].find("</").unwrap() + start;
-        println!("{}", &row[start..end]);
+        //println!("{}", &row[start..end]);
         return row[start..end].to_string();
     }
     String::new()
 }
 
-fn compute_lap_statistics(history: &[String]) -> (Option<String>, Option<String>) {
+fn compute_lap_statistics(history: &[String]) -> (Option<String>, Option<String>, Option<String>) {
     // Convert lap times to milliseconds
     let mut lap_times: Vec<u64> = history
         .iter()
@@ -357,10 +389,11 @@ fn compute_lap_statistics(history: &[String]) -> (Option<String>, Option<String>
         .collect();
 
     if lap_times.is_empty() {
-        return (None, None);
+        return (None, None, None);
     }
 
-    lap_times.sort_unstable(); // Sort lap times for median calculation
+    // Sort lap times for median calculation
+    lap_times.sort_unstable(); 
 
     // Compute median in milliseconds
     let median_millis = if lap_times.len() % 2 == 0 {
@@ -370,15 +403,49 @@ fn compute_lap_statistics(history: &[String]) -> (Option<String>, Option<String>
         lap_times[lap_times.len() / 2]
     };
 
+    // Exclude the slowest lap for average calculation
+    if lap_times.len() > 1 {
+        lap_times.remove(lap_times.len() - 1); // Remove the slowest lap
+    }
+
     // Compute average in milliseconds
-    let average_millis = lap_times.iter().sum::<u64>() / lap_times.len() as u64;
+    let average_millis = if lap_times.is_empty() {
+        None
+    } else {
+        Some(lap_times.iter().sum::<u64>() / lap_times.len() as u64)
+    };
+
+    // Calculate the median for the most recent 10 laps
+    let recent_millis = {
+        let recent_laps: Vec<u64> = history
+            .iter()
+            .rev()
+            .take(10) // Take the last 10 laps
+            .filter_map(|time| lap_time_to_milliseconds(time))
+            .collect();
+
+        if !recent_laps.is_empty() {
+            let mut recent_sorted = recent_laps.clone();
+            recent_sorted.sort_unstable();
+            let mid = recent_sorted.len() / 2;
+            Some(if recent_sorted.len() % 2 == 0 {
+                (recent_sorted[mid - 1] + recent_sorted[mid]) / 2
+            } else {
+                recent_sorted[mid]
+            })
+        } else {
+            None
+        }
+    };
 
     // Convert results back to the "minutes:seconds.milliseconds" format
     let median = Some(milliseconds_to_lap_time(median_millis));
-    let average = Some(milliseconds_to_lap_time(average_millis));
+    let average = average_millis.map(milliseconds_to_lap_time);
+    let recent = recent_millis.map(milliseconds_to_lap_time);
 
-    (median, average)
+    (median, average, recent)
 }
+
 
 fn lap_time_to_milliseconds(lap_time: &str) -> Option<u64> {
     let parts: Vec<&str> = lap_time.split(':').collect();
