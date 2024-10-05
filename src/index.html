@@ -38,20 +38,6 @@
             position: relative;
         }
 
-        th.sorted-asc::after {
-            content: "▲";
-            position: absolute;
-            right: 8px;
-            color: white;
-        }
-
-        th.sorted-desc::after {
-            content: "▼";
-            position: absolute;
-            right: 8px;
-            color: white;
-        }
-
         tbody tr:nth-child(even) {
             background-color: #f9f9f9;
         }
@@ -59,31 +45,88 @@
         tbody tr:hover {
             background-color: #f1f1f1;
         }
+
+        /* Tabs styling */
+        .tab {
+            display: inline-block;
+            margin-right: 10px;
+            padding: 10px;
+            cursor: pointer;
+            background-color: #ddd;
+            border-radius: 4px 4px 0 0;
+            border: 1px solid #ccc;
+        }
+
+        .tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ccc;
+            background-color: white;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
-    <h1>Live Race Data</h1>
-    <table id="race-table">
-        <thead>
-            <tr>
-                <th data-column="position">Position</th>
-                <th data-column="kart">Kart</th>
-                <th data-column="driver">Driver</th>
-                <th data-column="best">Best Lap</th>
-                <th data-column="last">Last Lap</th>
-                <th data-column="gap">Gap</th>
-                <th data-column="lap">Lap</th>
-                <th data-column="ontrack">On Track</th>
-                <th data-column="pit">Pit</th>
-                <th data-column="median">Median</th>
-                <th data-column="average">Average</th>
-                <th data-column="history">History</th>
-            </tr>
-        </thead>
-        <tbody id="race-data">
-            <!-- Rows will be inserted here -->
-        </tbody>
-    </table>
+    <h1>Race Data</h1>
+
+    <!-- Tabs -->
+    <div>
+        <span class="tab active" data-tab="live-race-data">Live Race Data</span>
+        <span class="tab" data-tab="stints-data">Stints Data</span>
+    </div>
+
+    <!-- Live Race Data Table -->
+    <div id="live-race-data" class="tab-content active">
+        <table id="race-table">
+            <thead>
+                <tr>
+                    <th data-column="position">Position</th>
+                    <th data-column="kart">Kart</th>
+                    <th data-column="driver">Driver</th>
+                    <th data-column="best">Best Lap</th>
+                    <th data-column="last">Last Lap</th>
+                    <th data-column="gap">Gap</th>
+                    <th data-column="lap">Lap</th>
+                    <th data-column="ontrack">On Track</th>
+                    <th data-column="pit">Pit</th>
+                    <th data-column="median">Median</th>
+                    <th data-column="average">Average</th>
+                    <th data-column="history">History</th>
+                </tr>
+            </thead>
+            <tbody id="race-data">
+                <!-- Rows will be inserted here -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Stints Data Table -->
+    <div id="stints-data" class="tab-content">
+        <table id="stints-table">
+            <thead>
+                <tr>
+                    <th>Kart</th>
+                    <th>Driver</th>
+                    <th>Lap</th>
+                    <th>Median</th>
+                    <th>Average</th>
+                    <th>Recent</th>
+                    <th>History</th>
+                </tr>
+            </thead>
+            <tbody id="stints-data-body">
+                <!-- Stints rows will be inserted here -->
+            </tbody>
+        </table>
+    </div>
 
     <script>
         const ws = new WebSocket(`ws://${window.location.host}/ws`);
@@ -91,6 +134,8 @@
         let sortColumn = "position";
         let sortOrder = "asc";
         let currentData = {}; // To store the current race data
+        let pitStopsData = {}; // To store the current pit stops (stints) data
+        let expandedRows = {}; // Track expanded history rows
 
         function compareValues(a, b, column, order) {
             let valA = a[column];
@@ -117,6 +162,15 @@
 
             for (const [id, entry] of sortedEntries) {
                 const row = document.createElement('tr');
+                row.dataset.kartId = id;  // Assign a unique ID to each row
+
+                const lastFiveHistory = entry.history.slice(-5);  // Show only the last 5 laps by default
+
+                // Check if the row is expanded or not
+                const isExpanded = expandedRows[id] === true;
+                const displayedHistory = isExpanded ? entry.history : lastFiveHistory;
+                const symbol = isExpanded ? '−' : '+';  // Expanded: −, Collapsed: +
+
                 row.innerHTML = `
                     <td>${entry.position}</td>
                     <td>${entry.kart}</td>
@@ -129,15 +183,55 @@
                     <td>${entry.pit}</td>
                     <td>${entry.median}</td>
                     <td>${entry.average}</td>
-                    <td>${entry.history.join(', ')}</td>
+                    <td class="history">${displayedHistory.join(', ')} <span class="toggle-symbol">${symbol}</span></td>
                 `;
                 tbody.appendChild(row);
+
+                // Add click event listener to toggle full history display
+                row.addEventListener('click', () => {
+                    const historyCell = row.querySelector('.history');
+                    const symbolSpan = row.querySelector('.toggle-symbol');
+
+                    // Toggle the expansion state
+                    if (expandedRows[id]) {
+                        historyCell.innerHTML = lastFiveHistory.join(', ') + ' <span class="toggle-symbol">+</span>';  // Collapse to last 5
+                        expandedRows[id] = false;
+                    } else {
+                        historyCell.innerHTML = entry.history.join(', ') + ' <span class="toggle-symbol">−</span>';  // Expand to full history
+                        expandedRows[id] = true;
+                    }
+                });
+            }
+        }
+
+        function updateStintsTable(stintsData) {
+            const stintsTbody = document.getElementById('stints-data-body'); // Ensure this matches the new ID
+            stintsTbody.innerHTML = ''; // Clear only the body, keeping the header intact
+
+            // Reverse the order of stints data
+            const reversedStints = stintsData.slice().reverse(); // Create a shallow copy and reverse it
+
+            for (const stint of reversedStints) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${stint.kart}</td>
+                    <td>${stint.driver}</td>
+                    <td>${stint.lap}</td>
+                    <td>${stint.median || 'N/A'}</td>
+                    <td>${stint.average || 'N/A'}</td>
+                    <td>${stint.recent || 'N/A'}</td>
+                    <td>${stint.history.join(', ') || 'N/A'}</td>
+                `;
+                stintsTbody.appendChild(row);
             }
         }
 
         ws.onmessage = (event) => {
-            currentData = JSON.parse(event.data).grid; // Update the current data
-            updateTable(currentData); // Update table with the latest data
+            const message = JSON.parse(event.data);
+            currentData = message.grid; // Update the current data
+            pitStopsData = message.pit_stops; // Update the pit stops (stints) data
+            updateTable(currentData);  // Update table with the latest data
+            updateStintsTable(pitStopsData);  // Update stints table with the latest pit stops data
         };
 
         ws.onclose = () => {
@@ -158,6 +252,21 @@
                 th.classList.add(sortOrder === 'asc' ? 'sorted-asc' : 'sorted-desc');
 
                 updateTable(currentData); // Update table based on current sorting
+            });
+        });
+
+        // Tab switching functionality
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const activeTab = document.querySelector('.tab.active');
+                const activeContent = document.querySelector('.tab-content.active');
+
+                if (activeTab) activeTab.classList.remove('active');
+                if (activeContent) activeContent.classList.remove('active');
+
+                tab.classList.add('active');
+                const tabContent = document.getElementById(tab.getAttribute('data-tab'));
+                if (tabContent) tabContent.classList.add('active');
             });
         });
 
