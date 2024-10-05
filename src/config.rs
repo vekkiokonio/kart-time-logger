@@ -22,9 +22,9 @@ impl TrackConfig {
                 }
             }
             // Karting Center Campillos
-            "CAMPILLOS-PRACTICE" | "CAMPILLOS-RACE" | "CAMPILLOS-8HORAS-FP" => {
+            "CAMPILLOS-PRACTICE" | "CAMPILLOS-RACE" | "CAMPILLOS-8HORAS-FP" | "CAMPILLOS-30HORAS" => {
                 TrackConfig {
-                    url_track: "ws://www.apex-timing.com:9372/",
+                    url_track: "ws://www.apex-timing.com:8802/",
                 }
             }
             // Ariza Racing Circuit
@@ -84,7 +84,7 @@ impl RaceConfig {
                 ontrack: "c9",
                 pit: "c10",
             },
-            // Race @ Lignano Circuit
+            // Race @ Karting Club Los Santos
             "SANTOS-RACE" => RaceConfig {
                 kart: "c3",
                 driver: "c4",
@@ -120,7 +120,7 @@ impl RaceConfig {
                 ontrack: "not-present",
                 pit: "not-present",
             },
-            // Free Practice / Race @ Karting Center Campillos
+            // Free Practice / Race 8 Horas @ Karting Center Campillos
             "CAMPILLOS-8HORAS-FP" => RaceConfig {
                 kart: "c6",
                 driver: "c2",
@@ -130,9 +130,21 @@ impl RaceConfig {
                 gap: "c4",
                 lap: "c12",
                 ontrack: "not-present",
-                pit: "C3",
+                pit: "c3",
             },
-            // Free Practice / Race @ Karting Center Campillos
+            // Race 30 Horas @ Karting Center Campillos
+            "CAMPILLOS-30HORAS" => RaceConfig {
+                kart: "c4",
+                driver: "c5",
+                position: "c2",
+                best: "c12",
+                last: "c10",
+                gap: "c11",
+                lap: "c6",
+                ontrack: "c13",
+                pit: "c14",
+            },
+            // Free Practice / Race @ Ariza Racing Circuit
             "ARIZA-PRACTICE" | "ARIZA-RACE" => RaceConfig {
                 kart: "c4",
                 driver: "c5",

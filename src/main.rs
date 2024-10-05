@@ -20,10 +20,10 @@ use std::io::Write;
 use chrono::Local;
 use tokio::signal;
 use std::path::Path;
-use std::collections::VecDeque;
 
 // Select track and type of race
-const PROFILE: &str = "CAMPILLOS-PRACTICE";
+const PROFILE: &str = "CAMPILLOS-30HORAS";
+
 
 // Define the GridData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -42,29 +42,29 @@ struct GridData {
     average: Option<String>,
     recent: Option<String>,
 }
-
-// Add history and ontrack
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 struct StintData {
     kart: String,
     driver: String,
-    median: String,     // TODO: this should be Option<String>
-    average: String,     // TODO: this should be Option<String>
     lap: String,
+    median: Option<String>,
+    average: Option<String>,
+    recent: Option<String>,
+    history: Vec<String>,
 }
 
 // Define the RaceData struct
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct RaceData {
     grid: HashMap<String, GridData>,
-    pit_stops: VecDeque<StintData>,
+    pit_stops: Vec<StintData>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let race_data = Arc::new(Mutex::new(RaceData { 
         grid: HashMap::new(), 
-        pit_stops: VecDeque::with_capacity(15) // Initialize with capacity
+        pit_stops: Vec::new(),
     }));
     
     let (tx, _rx) = broadcast::channel::<String>(100);
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         while let Some(msg) = read.next().await {
             if let Ok(WsMessage::Text(text)) = msg {
-                //println!("Received text: {}", text);
+                println!("Received text: {}", text);
 
                 {
                     let mut race_data_guard = race_data_for_socket.lock().unwrap();
@@ -195,8 +195,8 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                     let driver = extract_data(row, config.driver());
                     let best = extract_data(row, config.best());
                     let last = extract_data(row, config.last());
-                    let gap = extract_data(row, config.gap());
                     let lap = extract_data(row, config.lap());
+                    let gap = extract_data(row, config.gap());
                     let ontrack = extract_data(row, config.ontrack());
 
                     // Push to race_data.grid
@@ -305,25 +305,22 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                                 _ if column.as_str() == config.pit() => {
                                     race_data.grid.entry(row_id.clone()).and_modify(|grid_data| {
                                         grid_data.pit = grid_data.lap.clone();
-                                        
-                                        // Clear the history when the kart makes a pit stop
-                                        grid_data.history.clear();
 
                                         // Create a StintData instance from grid data
                                         let pit_stop = StintData {
                                             kart: grid_data.kart.clone(),
                                             driver: grid_data.driver.clone(),
-                                            median: grid_data.median.clone().unwrap_or_default(),
-                                            average: grid_data.average.clone().unwrap_or_default(),
+                                            history: grid_data.history.clone(),
+                                            median: Some(grid_data.median.clone().unwrap_or_default()),
+                                            average: Some(grid_data.average.clone().unwrap_or_default()),
+                                            recent: Some(grid_data.recent.clone().unwrap_or_default()),
                                             lap: grid_data.pit.clone(),
                                         };
-
                                         println!("{:?}", pit_stop);
-                                        // Push to pit_stops, maintaining a maximum of 15 entries
-                                        race_data.pit_stops.push_front(pit_stop);
-                                        if race_data.pit_stops.len() > 15 {
-                                            race_data.pit_stops.pop_back(); // Remove the oldest (back) entry
-                                        }
+                                        race_data.pit_stops.push(pit_stop);
+
+                                        // Clear the history when the kart makes a pit stop
+                                        grid_data.history.clear();
                                     });
                                 }
                                 _ => {}
