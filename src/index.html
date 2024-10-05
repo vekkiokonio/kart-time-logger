@@ -46,6 +46,21 @@
             background-color: #f1f1f1;
         }
 
+        .chevron {
+            font-size: 0.8em;
+            margin-left: 5px;
+            transition: transform 0.3s ease;
+        }
+
+        .expanded .chevron {
+            transform: rotate(90deg);
+        }
+
+        /* Hand cursor for history column */
+        .history {
+            cursor: pointer; /* Change cursor to hand on hover */
+        }
+
         /* Tabs styling */
         .tab {
             display: inline-block;
@@ -95,10 +110,10 @@
                     <th data-column="last">Last Lap</th>
                     <th data-column="gap">Gap</th>
                     <th data-column="lap">Lap</th>
-                    <th data-column="ontrack">On Track</th>
                     <th data-column="pit">Pit</th>
                     <th data-column="median">Median</th>
                     <th data-column="average">Average</th>
+                    <th data-column="recebt">Recent</th>
                     <th data-column="history">History</th>
                 </tr>
             </thead>
@@ -164,12 +179,11 @@
                 const row = document.createElement('tr');
                 row.dataset.kartId = id;  // Assign a unique ID to each row
 
-                const lastFiveHistory = entry.history.slice(-5);  // Show only the last 5 laps by default
+                const recentHistory = entry.history.slice(-5);  // Show only the last 5 laps by default
 
                 // Check if the row is expanded or not
                 const isExpanded = expandedRows[id] === true;
-                const displayedHistory = isExpanded ? entry.history : lastFiveHistory;
-                const symbol = isExpanded ? '−' : '+';  // Expanded: −, Collapsed: +
+                const displayedHistory = isExpanded ? entry.history : recentHistory;
 
                 row.innerHTML = `
                     <td>${entry.position}</td>
@@ -179,25 +193,25 @@
                     <td>${entry.last}</td>
                     <td>${entry.gap}</td>
                     <td>${entry.lap}</td>
-                    <td>${entry.ontrack}</td>
                     <td>${entry.pit}</td>
                     <td>${entry.median}</td>
                     <td>${entry.average}</td>
-                    <td class="history">${displayedHistory.join(', ')} <span class="toggle-symbol">${symbol}</span></td>
+                    <td>${entry.recent}</td>
+                    <td class="history">${displayedHistory.join(', ')} <span class="chevron">${isExpanded ? '▼' : '►'}</span></td>
                 `;
                 tbody.appendChild(row);
 
                 // Add click event listener to toggle full history display
                 row.addEventListener('click', () => {
                     const historyCell = row.querySelector('.history');
-                    const symbolSpan = row.querySelector('.toggle-symbol');
+                    const chevron = row.querySelector('.chevron');
 
                     // Toggle the expansion state
                     if (expandedRows[id]) {
-                        historyCell.innerHTML = lastFiveHistory.join(', ') + ' <span class="toggle-symbol">+</span>';  // Collapse to last 5
+                        historyCell.innerHTML = recentHistory.join(', ') + ' <span class="chevron">►</span>';  // Collapse to last 5
                         expandedRows[id] = false;
                     } else {
-                        historyCell.innerHTML = entry.history.join(', ') + ' <span class="toggle-symbol">−</span>';  // Expand to full history
+                        historyCell.innerHTML = entry.history.join(', ') + ' <span class="chevron">▼</span>';  // Expand to full history
                         expandedRows[id] = true;
                     }
                 });
