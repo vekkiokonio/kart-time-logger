@@ -30,6 +30,7 @@ const PROFILE: &str = "CAMPILLOS-30HORAS";
 struct GridData {
     kart: String,
     driver: String,
+    team: String,
     position: String,
     best: String,
     last: String,
@@ -193,6 +194,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                     let position = extract_data(row, config.position());
                     let kart = extract_data(row, config.kart());
                     let driver = extract_data(row, config.driver());
+                    let team = extract_data(row, config.driver());
                     let best = extract_data(row, config.best());
                     let last = extract_data(row, config.last());
                     let lap = extract_data(row, config.lap());
@@ -204,6 +206,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                         position,
                         kart,
                         driver,
+                        team,
                         best,
                         last: last.clone(),
                         gap,
@@ -241,7 +244,7 @@ fn parse_race_data(data: &str, race_data: &mut RaceData, config: &RaceConfig) {
                         if let Some(value) = row.get(2) {
                             match column.as_str() {
                                 // Update driver
-                                _ if column.as_str() == config.driver() =>  {
+                                _ if column.as_str() == config.driver() && line.contains("drteam") =>  {
                                     race_data.grid.entry(row_id).and_modify(|grid_data| {
                                         grid_data.driver = value.to_string();
                                     });

@@ -106,6 +106,7 @@
                     <th data-column="position">Position</th>
                     <th data-column="kart">Kart</th>
                     <th data-column="driver">Driver</th>
+                    <th data-column="team">Team</th>
                     <th data-column="best">Best Lap</th>
                     <th data-column="last">Last Lap</th>
                     <th data-column="gap">Gap</th>
@@ -130,6 +131,7 @@
                 <tr>
                     <th>Kart</th>
                     <th>Driver</th>
+                    <th>Team</th>
                     <th>Lap</th>
                     <th>Median</th>
                     <th>Average</th>
@@ -189,6 +191,7 @@
                     <td>${entry.position}</td>
                     <td>${entry.kart}</td>
                     <td>${entry.driver}</td>
+                    <td>${entry.team}</td>
                     <td>${entry.best}</td>
                     <td>${entry.last}</td>
                     <td>${entry.gap}</td>
@@ -230,6 +233,7 @@
                 row.innerHTML = `
                     <td>${stint.kart}</td>
                     <td>${stint.driver}</td>
+                    <td>${stint.team}</td>
                     <td>${stint.lap}</td>
                     <td>${stint.median || 'N/A'}</td>
                     <td>${stint.average || 'N/A'}</td>
